@@ -1,0 +1,12 @@
+*.json
+*.pdf
+*.docx
+*.tec
+*.toc
+*.txt
+*.synctex.gz
+*.out
+*.aux
+*.epub
+*.tex
+*.log
