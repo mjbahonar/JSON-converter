@@ -9,7 +9,8 @@ from ebooklib import epub
 import os
 
 # === Load JSON data ===
-jsonName="Journal-25-june.json"
+# Updated to use your new JSON file
+jsonName="Journal1.json"
 with open(jsonName, "r", encoding="utf-8") as f:
     data = json.load(f)
 
@@ -19,6 +20,12 @@ output_prefix = f"output_{jsonName}_{today_str}"
 
 # === Process notes with creation date ===
 entries = data["entries"]
+
+# === MODIFICATION START ===
+# Sort entries by 'creationDate' in chronological order before processing
+entries.sort(key=lambda x: x['creationDate'])
+# === MODIFICATION END ===
+
 notes = []
 for entry in entries:
     creation_date_str = entry.get("creationDate", "")
