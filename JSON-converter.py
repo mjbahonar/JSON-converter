@@ -9,22 +9,27 @@ from ebooklib import epub
 import os
 
 # === Load JSON data ===
-# Updated to use your new JSON file
 jsonName="Journal1.json"
 with open(jsonName, "r", encoding="utf-8") as f:
     data = json.load(f)
 
-# === Setup output prefix ===
+# === MODIFICATION START ===
+# --- Create output folder based on JSON filename ---
+folder_name = os.path.splitext(jsonName)[0]
+os.makedirs(folder_name, exist_ok=True)
+# === MODIFICATION END ===
+
+# === Setup output prefix to include the new folder ===
 today_str = datetime.now().strftime("%Y-%m-%d")
-output_prefix = f"output_{jsonName}_{today_str}"
+# We use os.path.join to create a correct file path for any OS
+base_filename = f"output_{os.path.basename(jsonName)}_{today_str}"
+output_prefix = os.path.join(folder_name, base_filename)
 
 # === Process notes with creation date ===
 entries = data["entries"]
 
-# === MODIFICATION START ===
-# Sort entries by 'creationDate' in chronological order before processing
+# Sort entries by 'creationDate' in chronological order
 entries.sort(key=lambda x: x['creationDate'])
-# === MODIFICATION END ===
 
 notes = []
 for entry in entries:
@@ -272,7 +277,6 @@ with open(f"{output_prefix}.tex", "w", encoding="utf-8") as f:
     # Notes content
     for i, note in enumerate(notes):
         f.write(f"\\textbf{{Date: {note['date']}}} ")
-        #f.write(r"\addcontentsline{toc}{section}{" + f"Date: {note['date']}" + "}\n")
         latex_content = markdown_to_latex(note['text'])
         f.write(latex_content + "\n\n")
         f.write("\\vspace{1em}\n\n")
@@ -389,14 +393,16 @@ book.add_item(epub.EpubNav())
 book.spine = ['nav'] + chapters
 
 # Write the EPUB file
-epub.write_epub(f"{output_prefix}.epub", book)
+epub_filename = f"{output_prefix}.epub"
+epub.write_epub(epub_filename, book)
 
-print("✅ All files generated:")
+print("✅ All files generated in folder:", folder_name)
 print(f"- {output_prefix}.txt (plain text)")
 print(f"- {output_prefix}.tex (LaTeX with formatting)")
 print(f"- {output_prefix}.docx (Word with formatting)")
 print(f"- {output_prefix}.pdf (from Word)")
-print(f"- {output_prefix}.epub (eBook with H1 headings in TOC)")
+print(f"- {epub_filename} (eBook with H1 headings in TOC)")
+
 
 # Print summary of EPUB structure
 if h1_sections:
@@ -405,3 +411,5 @@ if h1_sections:
         print(f"  - {section['title']} (from {section['date']})")
 else:
     print(f"\n📖 EPUB contains {len(notes)} chapters based on dates (no H1 headings found):")
+    for note in notes:
+        print(f"  - Entry {note['date']}")
