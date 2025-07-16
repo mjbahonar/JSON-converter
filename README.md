@@ -3,7 +3,7 @@
 
 A powerful Python script to convert your **Day One journal exports** or **standard Markdown files** into a multitude of beautiful, organized formats, ready for archiving or sharing.
 
-![output_files](https://user-images.githubusercontent.com/12345/67890-example.png) <!-- TODO: Replace this with a screenshot of the beautiful HTML output! -->
+![output_files](files.png) 
 
 ## ✨ Features
 
