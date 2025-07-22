@@ -93,7 +93,7 @@ HTML_CSS_STYLE = """
 """
 
 # === Configure Input File ===
-input_filename = "Kordestan.json" 
+input_filename = "Journal1.json" 
 
 # === Configure the Persian font for LaTeX output ===
 PERSIAN_LATEX_FONT = "XB Niloofar"
@@ -130,6 +130,9 @@ else:
 def is_persian(text):
     return any('\u0600' <= char <= '\u06FF' for char in text)
 
+# === MODIFIED: Check for Persian text once, for all formats that need it ===
+contains_persian = any(is_persian(note['text']) for note in notes)
+
 # === Markdown Processing Functions ===
 def markdown_to_plain_text(text):
     text = re.sub(r'^#{1,6}\s+(.+)$', r'\1', text, flags=re.MULTILINE)
@@ -140,10 +143,7 @@ def markdown_to_plain_text(text):
     text = re.sub(r'```.*?\n(.*?)\n```', r'\1', text, flags=re.DOTALL)
     return text
 
-# === CORRECTED markdown_to_latex FUNCTION ===
-def markdown_to_latex(text, contains_persian):
-    # This function now converts '# Title' to '\section{Title}' (no asterisk)
-    # This lets LaTeX handle the Table of Contents automatically.
+def markdown_to_latex(text, use_persian_mode):
     text = re.sub(r'^# (.+)$', r'\\section{\1}', text, flags=re.MULTILINE)
     text = re.sub(r'^## (.+)$', r'\\subsection{\1}', text, flags=re.MULTILINE)
     text = re.sub(r'^### (.+)$', r'\\subsubsection{\1}', text, flags=re.MULTILINE)
@@ -153,10 +153,9 @@ def markdown_to_latex(text, contains_persian):
     text = re.sub(r'```.*?\n(.*?)\n```', r'\\begin{verbatim}\n\1\n\\end{verbatim}', text, flags=re.DOTALL)
     text = re.sub(r'\[(.+?)\]\((.+?)\)', r'\\href{\2}{\1}', text)
 
-    if contains_persian:
+    if use_persian_mode:
         return text
     else:
-        # This part handles escaping special LaTeX characters for non-Persian text
         processed_lines = []
         for line in text.split('\n'):
             if line.strip().startswith('\\'):
@@ -224,15 +223,38 @@ def split_content_by_h1(text):
 
 h1_sections = [{'date': note['date'], 'title': s['title'], 'content': s['content']} for note in notes for s in split_content_by_h1(note['text'])]
 
-# 1. Styled HTML
+# === 1. Styled HTML (MODIFIED to add RTL conditionally) ===
 html_filename = f"{output_prefix}.html"
+final_css = HTML_CSS_STYLE
+html_attrs = 'lang="en"'
+
+if contains_persian:
+    print("Persian text detected. Applying RTL direction to HTML output.")
+    html_attrs = 'lang="fa" dir="rtl"'
+    # Add CSS rules needed for proper RTL display
+    rtl_css = """
+    /* --- RTL SUPPORT --- */
+    html[dir="rtl"] body {
+        direction: rtl;
+        text-align: right;
+    }
+    /* Keep code blocks LTR for correct formatting */
+    html[dir="rtl"] pre,
+    html[dir="rtl"] code {
+        direction: ltr;
+        text-align: left;
+    }
+    """
+    final_css += rtl_css
+
 with open(html_filename, "w", encoding="utf-8") as f:
-    f.write(f'<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Journal Entries</title>{HTML_CSS_STYLE}</head><body>\n')
+    f.write(f'<!DOCTYPE html><html {html_attrs}><head><meta charset="UTF-8"><title>Journal Entries</title><style>{final_css}</style></head><body>\n')
     f.write('<div class="container"><div class="main-title"><h1>Journal Entries</h1></div>\n')
     for note in notes:
         f.write(f'<div class="entry"><div class="entry-date">Date: {note["date"]}</div>\n')
         f.write(f'<div class="entry-content">{markdown_to_html(note["text"])}</div></div>\n')
     f.write('</div></body></html>')
+
 
 # 2. Markdown
 md_filename = f"{output_prefix}.md"
@@ -246,11 +268,9 @@ with open(txt_filename, "w", encoding="utf-8") as f:
     txt_parts = [f"Date: {note['date']}\n{markdown_to_plain_text(note['text'])}" for note in notes]
     f.write("\n\n".join(txt_parts))
 
-# === 4. LaTeX (REVISED TO USE AUTOMATIC ToC) ===
+# 4. LaTeX
 tex_filename = f"{output_prefix}.tex"
-contains_persian = any(is_persian(note['text']) for note in notes)
 with open(tex_filename, "w", encoding="utf-8") as f:
-    # Common preamble
     preamble = [
         r"\documentclass[a4paper,12pt]{article}",
         r"\usepackage{hyperref}",
@@ -273,21 +293,16 @@ with open(tex_filename, "w", encoding="utf-8") as f:
     f.write("\\begin{titlepage}\n\\centering\n\\vspace*{5cm}\n{\\Huge\\bfseries Collected Notes \\par}\n\\vfill\n\\end{titlepage}" + "\n\n")
     f.write(r"\tableofcontents" + "\n" + r"\newpage" + "\n\n")
     
-    # Check if there are H1 titles to use for chapters
     has_titles = h1_sections and h1_sections[0]['title'] is not None
 
     if has_titles:
         print("Found H1 headings. Using titles for LaTeX chapters.")
         for section in h1_sections:
-            # We no longer need \addcontentsline. Just process the content.
-            # markdown_to_latex will create the \section{} command, which automatically updates the ToC.
             processed_text = markdown_to_latex(section['content'], contains_persian)
             f.write(f"{processed_text}\n\n\\newpage\n\n")
     else:
-        # Fallback if no H1s are found. We create a \section with the date.
         print("No H1 headings found. Using dates for LaTeX chapters.")
         for note in notes:
-            # Manually create a section for each note using the date
             f.write(f"\\section{{Entry: {note['date']}}}\n")
             processed_text = markdown_to_latex(note['text'], contains_persian)
             f.write(f"{processed_text}\n\n\\newpage\n\n")
