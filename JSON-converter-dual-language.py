@@ -93,10 +93,9 @@ HTML_CSS_STYLE = """
 """
 
 # === Configure Input File ===
-input_filename = "Journal1.json" 
+input_filename = "Kordestan.json" 
 
-# === NEW: Configure the Persian font for LaTeX output ===
-# Change this to any Persian font you have installed on your system (e.g., "B Nazanin", "Yas", "IRANSans")
+# === Configure the Persian font for LaTeX output ===
 PERSIAN_LATEX_FONT = "XB Niloofar"
 
 # === Setup output folder and prefix ===
@@ -141,60 +140,27 @@ def markdown_to_plain_text(text):
     text = re.sub(r'```.*?\n(.*?)\n```', r'\1', text, flags=re.DOTALL)
     return text
 
-# === CORRECTED FUNCTION START ===
+# === CORRECTED markdown_to_latex FUNCTION ===
 def markdown_to_latex(text, contains_persian):
-    """
-    Converts a Markdown string to LaTeX, correctly handling nested styles within headings.
-    """
-    # First, handle multi-line code blocks by replacing them with a placeholder.
-    # This prevents their content from being processed by other rules.
-    verbatim_blocks = []
-    def stash_verbatim(match):
-        placeholder = f"__VERBATIM_PLACEHOLDER_{len(verbatim_blocks)}__"
-        # Extract content between the ``` markers.
-        content = match.group(1)
-        verbatim_blocks.append(f"\\begin{{verbatim}}\n{content}\n\\end{{verbatim}}")
-        return placeholder
-    
-    text = re.sub(r'```.*?\n(.*?)\n```', stash_verbatim, text, flags=re.DOTALL)
+    # This function now converts '# Title' to '\section{Title}' (no asterisk)
+    # This lets LaTeX handle the Table of Contents automatically.
+    text = re.sub(r'^# (.+)$', r'\\section{\1}', text, flags=re.MULTILINE)
+    text = re.sub(r'^## (.+)$', r'\\subsection{\1}', text, flags=re.MULTILINE)
+    text = re.sub(r'^### (.+)$', r'\\subsubsection{\1}', text, flags=re.MULTILINE)
+    text = re.sub(r'\*\*(.+?)\*\*|__(.+?)__', r'\\textbf{\1\2}', text)
+    text = re.sub(r'(?<!\*)\*([^*]+?)\*(?!\*)|(?<!_)_([^_]+?)_(?!_)', r'\\textit{\1\2}', text)
+    text = re.sub(r'`(.+?)`', r'\\texttt{\1}', text)
+    text = re.sub(r'```.*?\n(.*?)\n```', r'\\begin{verbatim}\n\1\n\\end{verbatim}', text, flags=re.DOTALL)
+    text = re.sub(r'\[(.+?)\]\((.+?)\)', r'\\href{\2}{\1}', text)
 
-    # Helper function for processing inline markdown styles.
-    def process_inline_markdown(line):
-        line = re.sub(r'\*\*(.+?)\*\*|__(.+?)__', r'\\textbf{\1\2}', line)
-        line = re.sub(r'(?<!\*)\*([^*]+?)\*(?!\*)|(?<!_)_([^_]+?)_(?!_)', r'\\textit{\1\2}', line)
-        line = re.sub(r'`(.+?)`', r'\\texttt{\1}', line)
-        line = re.sub(r'\[(.+?)\]\((.+?)\)', r'\\href{\2}{\1}', line)
-        return line
-
-    # Process each line of the text.
-    processed_lines = []
-    for line in text.split('\n'):
-        # Process Headings by isolating their content first.
-        if line.startswith('# '):
-            processed_lines.append(f"\\section*{{{process_inline_markdown(line[2:])}}}")
-        elif line.startswith('## '):
-            processed_lines.append(f"\\subsection*{{{process_inline_markdown(line[3:])}}}")
-        elif line.startswith('### '):
-            processed_lines.append(f"\\subsubsection*{{{process_inline_markdown(line[4:])}}}")
-        # All other lines are processed for inline markdown.
-        else:
-            processed_lines.append(process_inline_markdown(line))
-            
-    text = '\n'.join(processed_lines)
-
-    # Restore the verbatim blocks that were stashed.
-    for i, block in enumerate(verbatim_blocks):
-        text = text.replace(f"__VERBATIM_PLACEHOLDER_{i}__", block)
-
-    # The original logic for escaping special characters in non-Persian text.
     if contains_persian:
         return text
     else:
-        escaped_lines = []
+        # This part handles escaping special LaTeX characters for non-Persian text
+        processed_lines = []
         for line in text.split('\n'):
-            # Don't escape lines that are already LaTeX commands.
             if line.strip().startswith('\\'):
-                escaped_lines.append(line)
+                processed_lines.append(line)
                 continue
             
             processed_line = ""
@@ -202,9 +168,8 @@ def markdown_to_latex(text, contains_persian):
                              '~': r'\textasciitilde{}', '^': r'\textasciicircum{}', '\\': r'\textbackslash{}'}
             for char in line:
                 processed_line += special_chars.get(char, char)
-            escaped_lines.append(processed_line)
-        return '\n'.join(escaped_lines)
-# === CORRECTED FUNCTION END ===
+            processed_lines.append(processed_line)
+        return '\n'.join(processed_lines)
 
 def markdown_to_html(text):
     text = re.sub(r'^# (.+)$', r'<h1>\1</h1>', text, flags=re.MULTILINE)
@@ -251,9 +216,13 @@ def split_content_by_h1(text):
             current_h1 = line[2:].strip(); current_section = [line]
         else: current_section.append(line)
     if current_h1 is not None: sections.append({'title': current_h1, 'content': '\n'.join(current_section)})
+    if not sections:
+        return [{'title': None, 'content': text}]
     return sections
 
 # === Save to all formats ===
+
+h1_sections = [{'date': note['date'], 'title': s['title'], 'content': s['content']} for note in notes for s in split_content_by_h1(note['text'])]
 
 # 1. Styled HTML
 html_filename = f"{output_prefix}.html"
@@ -277,7 +246,7 @@ with open(txt_filename, "w", encoding="utf-8") as f:
     txt_parts = [f"Date: {note['date']}\n{markdown_to_plain_text(note['text'])}" for note in notes]
     f.write("\n\n".join(txt_parts))
 
-# 4. LaTeX
+# === 4. LaTeX (REVISED TO USE AUTOMATIC ToC) ===
 tex_filename = f"{output_prefix}.tex"
 contains_persian = any(is_persian(note['text']) for note in notes)
 with open(tex_filename, "w", encoding="utf-8") as f:
@@ -286,13 +255,9 @@ with open(tex_filename, "w", encoding="utf-8") as f:
         r"\documentclass[a4paper,12pt]{article}",
         r"\usepackage{hyperref}",
         r"\usepackage{fancyhdr}",
-        r"\usepackage{graphicx}"
+        r"\usepackage{graphicx}",
+        r"\setlength{\headheight}{15pt}"
     ]
-    # === CORRECTED PREAMBLE ADDITION START ===
-    # Fix for fancyhdr \headheight warning
-    preamble.append(r"\setlength{\headheight}{15pt}")
-    # === CORRECTED PREAMBLE ADDITION END ===
-
     if contains_persian:
         print(f"Persian text detected. Using XePersian with font '{PERSIAN_LATEX_FONT}' for LaTeX output.")
         preamble.append(r"\usepackage{xepersian}")
@@ -303,20 +268,29 @@ with open(tex_filename, "w", encoding="utf-8") as f:
     
     f.write("\n".join(preamble) + "\n")
     f.write(r"\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, pdfproducer={Python Script}, pdftitle={Collected Notes}}" + "\n")
-
-    # === CORRECTED DOCUMENT WRITING START ===
-    # Use standard strings with escaped backslashes to allow \n to function correctly
     f.write("\\pagestyle{fancy}\n\\fancyhf{}\n\\rhead{\\thepage}\n")
     f.write("\\begin{document}" + "\n\n")
     f.write("\\begin{titlepage}\n\\centering\n\\vspace*{5cm}\n{\\Huge\\bfseries Collected Notes \\par}\n\\vfill\n\\end{titlepage}" + "\n\n")
-    # === CORRECTED DOCUMENT WRITING END ===
-    
     f.write(r"\tableofcontents" + "\n" + r"\newpage" + "\n\n")
     
-    for note in notes:
-        processed_text = markdown_to_latex(note['text'], contains_persian)
-        f.write(f"\\addcontentsline{{toc}}{{section}}{{Entry: {note['date']}}}")
-        f.write(f"\\section*{{Entry: {note['date']}}}\n{processed_text}\n\n\\newpage\n\n")
+    # Check if there are H1 titles to use for chapters
+    has_titles = h1_sections and h1_sections[0]['title'] is not None
+
+    if has_titles:
+        print("Found H1 headings. Using titles for LaTeX chapters.")
+        for section in h1_sections:
+            # We no longer need \addcontentsline. Just process the content.
+            # markdown_to_latex will create the \section{} command, which automatically updates the ToC.
+            processed_text = markdown_to_latex(section['content'], contains_persian)
+            f.write(f"{processed_text}\n\n\\newpage\n\n")
+    else:
+        # Fallback if no H1s are found. We create a \section with the date.
+        print("No H1 headings found. Using dates for LaTeX chapters.")
+        for note in notes:
+            # Manually create a section for each note using the date
+            f.write(f"\\section{{Entry: {note['date']}}}\n")
+            processed_text = markdown_to_latex(note['text'], contains_persian)
+            f.write(f"{processed_text}\n\n\\newpage\n\n")
         
     f.write("\\end{document}")
 
@@ -345,8 +319,9 @@ if os.path.exists("cover.jpg"):
     print("✅ Cover image added to EPUB")
 else: print("⚠️ Cover image (cover.jpg) not found - EPUB will be created without cover")
 chapters, toc_entries = [], []
-h1_sections = [{'date': note['date'], 'title': s['title'], 'content': s['content']} for note in notes for s in split_content_by_h1(note['text'])]
-if h1_sections:
+
+has_titles_epub = h1_sections and h1_sections[0]['title'] is not None
+if has_titles_epub:
     for i, section in enumerate(h1_sections):
         chapter_filename = f'chap_{i+1:02d}.xhtml'
         chapter_title = section['title']
@@ -373,9 +348,9 @@ print(f"- {os.path.basename(docx_filename)} (Word)")
 if os.path.exists(f"{output_prefix}.pdf"): print(f"- {os.path.basename(output_prefix)}.pdf (PDF)")
 print(f"- {os.path.basename(epub_filename)} (EPUB)")
 
-if h1_sections:
-    print(f"\n📖 EPUB contains {len(h1_sections)} chapters based on H1 headings:")
+if has_titles_epub:
+    print(f"\n📖 EPUB and LaTeX contain {len(h1_sections)} chapters based on H1 headings:")
     for section in h1_sections: print(f"  - {section['title']} (from {section['date']})")
 else:
-    print(f"\n📖 EPUB contains {len(notes)} chapters based on dates (no H1 headings found):")
+    print(f"\n📖 EPUB and LaTeX contain {len(notes)} chapters based on dates (no H1 headings found):")
     for note in notes: print(f"  - Entry {note['date']}")
