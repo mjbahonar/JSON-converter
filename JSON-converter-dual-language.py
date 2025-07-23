@@ -7,6 +7,12 @@ from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx2pdf import convert  # Windows-only
 from ebooklib import epub
 import os
+# === Configure Input File ===
+input_filename = "kurd.json" 
+title_of_output = "سفرنامه کردستان"
+
+# === Configure the Persian font for LaTeX output ===
+PERSIAN_LATEX_FONT = "XB Niloofar"
 
 # === CSS for the beautiful HTML output ===
 HTML_CSS_STYLE = """
@@ -91,12 +97,6 @@ HTML_CSS_STYLE = """
     }
 </style>
 """
-
-# === Configure Input File ===
-input_filename = "Journal1.json" 
-
-# === Configure the Persian font for LaTeX output ===
-PERSIAN_LATEX_FONT = "XB Niloofar"
 
 # === Setup output folder and prefix ===
 folder_name = os.path.splitext(input_filename)[0]
@@ -248,8 +248,8 @@ if contains_persian:
     final_css += rtl_css
 
 with open(html_filename, "w", encoding="utf-8") as f:
-    f.write(f'<!DOCTYPE html><html {html_attrs}><head><meta charset="UTF-8"><title>Journal Entries</title><style>{final_css}</style></head><body>\n')
-    f.write('<div class="container"><div class="main-title"><h1>Journal Entries</h1></div>\n')
+    f.write(f'<!DOCTYPE html><html {html_attrs}><head><meta charset="UTF-8"><title>{title_of_output}</title><style>{final_css}</style></head><body>\n')
+    f.write(f'<div class="container"><div class="main-title"><h1>{title_of_output}</h1></div>\n')
     for note in notes:
         f.write(f'<div class="entry"><div class="entry-date">Date: {note["date"]}</div>\n')
         f.write(f'<div class="entry-content">{markdown_to_html(note["text"])}</div></div>\n')
@@ -276,6 +276,7 @@ with open(tex_filename, "w", encoding="utf-8") as f:
         r"\usepackage{hyperref}",
         r"\usepackage{fancyhdr}",
         r"\usepackage{graphicx}",
+        r"\usepackage{setspace}",   ##to adjust line spacing in following
         r"\setlength{\headheight}{15pt}"
     ]
     if contains_persian:
@@ -290,7 +291,10 @@ with open(tex_filename, "w", encoding="utf-8") as f:
     f.write(r"\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, pdfproducer={Python Script}, pdftitle={Collected Notes}}" + "\n")
     f.write("\\pagestyle{fancy}\n\\fancyhf{}\n\\rhead{\\thepage}\n")
     f.write("\\begin{document}" + "\n\n")
-    f.write("\\begin{titlepage}\n\\centering\n\\vspace*{5cm}\n{\\Huge\\bfseries Collected Notes \\par}\n\\vfill\n\\end{titlepage}" + "\n\n")
+    f.write("\\onehalfspacing" + "\n\n")     ##This ahjusts line space. Other options are: delete this line _ onehalfspacing _ setstretch{1.4} _ doublespacing
+    f.write("\\begin{titlepage}\n\\centering\n\\vspace*{5cm}\n{\\Huge\\bfseries")
+    f.write(f" {title_of_output} ")
+    f.write("\\par}\n\\vfill\n\\end{titlepage}" + "\n\n")
     f.write(r"\tableofcontents" + "\n" + r"\newpage" + "\n\n")
     
     has_titles = h1_sections and h1_sections[0]['title'] is not None
@@ -311,7 +315,7 @@ with open(tex_filename, "w", encoding="utf-8") as f:
 
 # 5. DOCX
 docx_filename = f"{output_prefix}.docx"
-doc = Document(); doc.add_heading("Collected Notes", level=1)
+doc = Document(); doc.add_heading(title_of_output, level=1)
 for note in notes:
     doc.add_heading(f"Date: {note['date']}", level=2); add_markdown_to_docx(doc, note['text']); doc.add_paragraph()
 doc.save(docx_filename)
@@ -328,7 +332,7 @@ except Exception as e:
 
 # 7. EPUB
 epub_filename = f"{output_prefix}.epub"
-book = epub.EpubBook(); book.set_identifier('id123456'); book.set_title('Collected Notes'); book.set_language('en')
+book = epub.EpubBook(); book.set_identifier('id123456'); book.set_title(title_of_output); book.set_language('en')
 if os.path.exists("cover.jpg"):
     book.set_cover("cover.jpg", open("cover.jpg", 'rb').read())
     print("✅ Cover image added to EPUB")
