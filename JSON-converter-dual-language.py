@@ -8,15 +8,14 @@ from docx2pdf import convert  # Windows-only
 from ebooklib import epub
 import os
 # === Configure Input File ===
-input_filename = "kurd.json" 
-title_of_output = "سفرنامه کردستان"
+input_filename = "Journal.json" 
+title_of_output = "My Joudnal"
 
 # === Configure the Persian font for LaTeX output ===
 PERSIAN_LATEX_FONT = "XB Niloofar"
 
 # === CSS for the beautiful HTML output ===
 HTML_CSS_STYLE = """
-<style>
     body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         line-height: 1.6;
@@ -95,7 +94,6 @@ HTML_CSS_STYLE = """
         margin: 0;
         font-size: 2.5rem;
     }
-</style>
 """
 
 # === Setup output folder and prefix ===
