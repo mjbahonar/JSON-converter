@@ -9,7 +9,7 @@ from ebooklib import epub
 import os
 # === Configure Input File ===
 input_filename = "Journal.json" 
-title_of_output = "My Joudnal"
+title_of_output = "Journal"
 
 # === Configure the Persian font for LaTeX output ===
 PERSIAN_LATEX_FONT = "XB Niloofar"
@@ -142,6 +142,7 @@ def markdown_to_plain_text(text):
     return text
 
 def markdown_to_latex(text, use_persian_mode):
+    # --- Existing Conversions ---
     text = re.sub(r'^# (.+)$', r'\\section{\1}', text, flags=re.MULTILINE)
     text = re.sub(r'^## (.+)$', r'\\subsection{\1}', text, flags=re.MULTILINE)
     text = re.sub(r'^### (.+)$', r'\\subsubsection{\1}', text, flags=re.MULTILINE)
@@ -151,12 +152,61 @@ def markdown_to_latex(text, use_persian_mode):
     text = re.sub(r'```.*?\n(.*?)\n```', r'\\begin{verbatim}\n\1\n\\end{verbatim}', text, flags=re.DOTALL)
     text = re.sub(r'\[(.+?)\]\((.+?)\)', r'\\href{\2}{\1}', text)
 
+    # --- NEW: Process lists (bullet points and numbered) ---
+    lines = text.split('\n')
+    processed_lines = []
+    in_itemize = False
+    in_enumerate = False
+
+    for line in lines:
+        # Check for numbered list items (e.g., "1. item")
+        numbered_match = re.match(r'^\s*(\d+)\.\s+(.*)', line)
+        # Check for bullet list items (e.g., "* item", "- item")
+        bullet_match = re.match(r'^\s*([*+-])\s+(.*)', line)
+
+        # Handle numbered lists
+        if numbered_match:
+            if not in_enumerate:
+                processed_lines.append(r'\begin{enumerate}')
+                in_enumerate = True
+            processed_lines.append(r'  \item ' + numbered_match.group(2))
+        else:
+            if in_enumerate:
+                processed_lines.append(r'\end{enumerate}')
+                in_enumerate = False
+            
+            # Handle bullet lists
+            if bullet_match:
+                if not in_itemize:
+                    processed_lines.append(r'\begin{itemize}')
+                    in_itemize = True
+                processed_lines.append(r'  \item ' + bullet_match.group(2))
+            else:
+                if in_itemize:
+                    processed_lines.append(r'\end{itemize}')
+                    in_itemize = False
+                
+                # If not in any list, add the line
+                if not in_enumerate and not in_itemize:
+                    processed_lines.append(line)
+
+    # Close any open list environments at the end of the text
+    if in_itemize:
+        processed_lines.append(r'\end{itemize}')
+    if in_enumerate:
+        processed_lines.append(r'\end{enumerate}')
+    
+    text = '\n'.join(processed_lines)
+
+
+    # --- Existing Character Escaping for non-Persian mode ---
     if use_persian_mode:
         return text
     else:
         processed_lines = []
         for line in text.split('\n'):
-            if line.strip().startswith('\\'):
+            # Avoid escaping LaTeX commands
+            if line.strip().startswith(('\\', r'\item')):
                 processed_lines.append(line)
                 continue
             
