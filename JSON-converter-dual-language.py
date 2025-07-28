@@ -8,8 +8,8 @@ from docx2pdf import convert  # Windows-only
 from ebooklib import epub
 import os
 # === Configure Input File ===
-input_filename = "Journal.json" 
-title_of_output = "Journal"
+input_filename = "Kurd.json" 
+title_of_output = "سفرنامه کردستان"
 
 # === Configure the Persian font for LaTeX output ===
 PERSIAN_LATEX_FONT = "XB Niloofar"
@@ -203,20 +203,29 @@ def markdown_to_latex(text, use_persian_mode):
     if use_persian_mode:
         return text
     else:
+        # ### START OF MODIFIED BLOCK ###
         processed_lines = []
         for line in text.split('\n'):
-            # Avoid escaping LaTeX commands
-            if line.strip().startswith(('\\', r'\item')):
-                processed_lines.append(line)
-                continue
-            
+            # The original check was insufficient. We will apply a more careful escaping
+            # to all lines, but we will not escape characters that form LaTeX commands.
+            if line.strip().startswith('\\begin{verbatim}'):
+                 processed_lines.append(line)
+                 continue
+
             processed_line = ""
-            special_chars = {'&': r'\&', '%': r'\%', '$': r'\$', '#': r'\#', '_': r'\_', '{': r'\{', '}': r'\}',
-                             '~': r'\textasciitilde{}', '^': r'\textasciicircum{}', '\\': r'\textbackslash{}'}
+            # This dictionary is modified to NOT escape \, {, and } which are
+            # part of the LaTeX commands we generate (e.g., \textbf{}).
+            special_chars = {'&': r'\&', '%': r'\%', '$': r'\$', '#': r'\#', '_': r'\_',
+                             '~': r'\textasciitilde{}', '^': r'\textasciicircum{}'}
+            
+            # The old check `if line.strip().startswith...` is removed and this logic applies to all lines.
+            # This fixes commands that appear in the middle of a line.
+            # We iterate character by character to build the escaped line.
             for char in line:
                 processed_line += special_chars.get(char, char)
             processed_lines.append(processed_line)
         return '\n'.join(processed_lines)
+        # ### END OF MODIFIED BLOCK ###
 
 def markdown_to_html(text):
     text = re.sub(r'^# (.+)$', r'<h1>\1</h1>', text, flags=re.MULTILINE)
