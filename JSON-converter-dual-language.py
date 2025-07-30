@@ -7,9 +7,16 @@ from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx2pdf import convert  # Windows-only
 from ebooklib import epub
 import os
+
 # === Configure Input File ===
-input_filename = "Kurd.json" 
-title_of_output = "سفرنامه کردستان"
+input_filename = "Journal.json"
+title_of_output = "The Journal"
+
+# === NEW: Configure LaTeX Lettrine (Large First Letter) ===
+# Set to True to start each chapter with a large decorative letter.
+# Set to False for normal paragraphs.
+# NOTE: This feature will be automatically disabled for Persian documents.
+USE_LETTRINE_IN_LATEX = False
 
 # === Configure the Persian font for LaTeX output ===
 PERSIAN_LATEX_FONT = "XB Niloofar"
@@ -130,6 +137,58 @@ def is_persian(text):
 
 # === MODIFIED: Check for Persian text once, for all formats that need it ===
 contains_persian = any(is_persian(note['text']) for note in notes)
+
+# === NEW: Function to apply LaTeX lettrine to a block of text ===
+def apply_lettrine_to_content(text_block):
+    """
+    Finds the first word of the main text (skipping headings) and wraps it in a
+    LaTeX \\lettrine command. This is applied per-chapter.
+    """
+    lines = text_block.split('\n')
+    for i, line in enumerate(lines):
+        stripped_line = line.strip()
+        # Find the first line that isn't empty and doesn't look like a LaTeX command.
+        if stripped_line and not stripped_line.startswith('\\'):
+            # Found the first content line. Now, find the first word.
+            words = stripped_line.split(None, 1)
+            if not words: continue
+
+            first_word_with_punct = words[0]
+            # Use regex to separate the word from any trailing punctuation
+            match = re.match(r'([a-zA-Z0-9]+)(\W*)', first_word_with_punct)
+
+            # ### START OF BUG FIX ###
+            # The original check prevented single-letter words like "I" or "A".
+            # The new check just ensures a word was actually found.
+            if not match:
+                continue
+            # ### END OF BUG FIX ###
+
+            first_word_clean = match.group(1)
+            trailing_punct = match.group(2)
+
+            first_letter = first_word_clean[0]
+            rest_of_word = first_word_clean[1:]
+
+            # The user-requested lettrine command
+            lettrine_cmd = f"\\lettrine[lines=2, lhang=0.33, loversize=0.3]{{{first_letter}}}{{{rest_of_word}}}"
+
+            # Reconstruct the original line with the new command
+            # This preserves leading whitespace and the rest of the line
+            start_index = line.find(first_word_with_punct)
+            end_index = start_index + len(first_word_with_punct)
+            
+            # Rebuild the rest of the line, handling the case where there is no more text
+            rest_of_the_line = words[1] if len(words) > 1 else ''
+            new_line = line[:start_index] + lettrine_cmd + trailing_punct + " " + rest_of_the_line
+            
+            lines[i] = new_line.strip()
+
+            # We are done, we only apply lettrine once per text block.
+            return '\n'.join(lines)
+
+    # If no suitable line was found, return the text unmodified.
+    return text_block
 
 # === Markdown Processing Functions ===
 def markdown_to_plain_text(text):
@@ -330,14 +389,24 @@ tex_filename = f"{output_prefix}.tex"
 with open(tex_filename, "w", encoding="utf-8") as f:
     preamble = [
         r"\documentclass[a4paper,12pt]{article}",
+        r"\usepackage{fontspec}",
+        r"\setmainfont{Alice}[AutoFakeBold=2.0]",
         r"\usepackage{hyperref}",
         r"\usepackage{fancyhdr}",
         r"\usepackage{graphicx}",
-        r"\usepackage{setspace}",   ##to adjust line spacing in following
+        r"\usepackage{setspace}",
         r"\setlength{\headheight}{15pt}"
     ]
+    # MODIFICATION: Add the lettrine package ONLY if enabled AND text is not Persian.
+    lettrine_is_active = USE_LETTRINE_IN_LATEX and not contains_persian
+    if lettrine_is_active:
+        print("Lettrine feature is enabled for LaTeX (English text only).")
+        preamble.append(r"\usepackage{lettrine}")
+
     if contains_persian:
         print(f"Persian text detected. Using XePersian with font '{PERSIAN_LATEX_FONT}' for LaTeX output.")
+        if USE_LETTRINE_IN_LATEX:
+            print(" -> Lettrine feature disabled for Persian text.")
         preamble.append(r"\usepackage{xepersian}")
         preamble.append(f"\\settextfont{{{PERSIAN_LATEX_FONT}}}")
     else:
@@ -348,7 +417,7 @@ with open(tex_filename, "w", encoding="utf-8") as f:
     f.write(r"\hypersetup{colorlinks=true, linkcolor=blue, urlcolor=blue, pdfproducer={Python Script}, pdftitle={Collected Notes}}" + "\n")
     f.write("\\pagestyle{fancy}\n\\fancyhf{}\n\\rhead{\\thepage}\n")
     f.write("\\begin{document}" + "\n\n")
-    f.write("\\onehalfspacing" + "\n\n")     ##This ahjusts line space. Other options are: delete this line _ onehalfspacing _ setstretch{1.4} _ doublespacing
+    f.write("\\onehalfspacing" + "\n\n")
     f.write("\\begin{titlepage}\n\\centering\n\\vspace*{5cm}\n{\\Huge\\bfseries")
     f.write(f" {title_of_output} ")
     f.write("\\par}\n\\vfill\n\\end{titlepage}" + "\n\n")
@@ -360,12 +429,18 @@ with open(tex_filename, "w", encoding="utf-8") as f:
         print("Found H1 headings. Using titles for LaTeX chapters.")
         for section in h1_sections:
             processed_text = markdown_to_latex(section['content'], contains_persian)
+            # MODIFICATION: Apply lettrine only if the flag is active.
+            if lettrine_is_active:
+                processed_text = apply_lettrine_to_content(processed_text)
             f.write(f"{processed_text}\n\n\\newpage\n\n")
     else:
         print("No H1 headings found. Using dates for LaTeX chapters.")
         for note in notes:
             f.write(f"\\section{{Entry: {note['date']}}}\n")
             processed_text = markdown_to_latex(note['text'], contains_persian)
+            # MODIFICATION: Apply lettrine only if the flag is active.
+            if lettrine_is_active:
+                processed_text = apply_lettrine_to_content(processed_text)
             f.write(f"{processed_text}\n\n\\newpage\n\n")
         
     f.write("\\end{document}")
